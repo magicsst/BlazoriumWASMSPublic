@@ -1,0 +1,186 @@
+﻿@page "/product/create"
+@page "/product/update/{id:int}"
+
+@inject IProductRepository _productRepository
+@inject ICategoryRepository _categoryRepository
+
+@inject NavigationManager _navigationManager
+@inject IJSRuntime _JS
+
+@rendermode @(new InteractiveWebAssemblyRenderMode(true))
+
+@if (IsProcessing)
+{
+    <div class="position-absolute w-75 h-75 d-flex flex-column align-items-center bg-white justify-content-center">
+        <img src="/images/loading.gif" alt="loading" />
+    </div>
+}
+else
+{
+     <div class="card shadow border-0 mt-4">
+        <div class="card-header bg-black bg-gradient ml-0 py-3">
+            <div class="row">
+                <div class="col-12 text-center">
+                    <h2 class="text-white py-2">@(Id==0?"Create":"Update")</h2> 
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-4">
+           <EditForm Model="Product" FormName="ProductUpsertForm" OnValidSubmit="UpsertProduct">
+               <DataAnnotationsValidator/>
+
+               <div class="border p-3 mt-4">
+                    <div class="form-floating py-3 col-12">
+                        <InputText @bind-Value="Product.Name" class="form-control" id="Name" />
+                        <label for="Name">Name</label>
+                        <ValidationMessage For="@(()=>Product.Name)" />
+                    </div>
+                    <div class="form-floating py-3 col-12">
+                        <InputText @bind-Value="Product.Description" class="form-control" id="Description" />
+                        <label for="Description">Description</label>
+                        <ValidationMessage For="@(() => Product.Description)" />
+                    </div>
+                    <div class="form-floating py-3 col-12">
+                        <InputNumber @bind-Value="Product.Price" class="form-control" id="Price" />
+                        <label for="Price">Price</label>
+                        <ValidationMessage For="@(() => Product.Price)" />
+                    </div>
+                    <!-- InputSelect -->
+                    <!-- Αντί form-control χρησιμοποιώ form-select -->
+                    <div class="form-floating py-3 col-12">
+                        <InputSelect @bind-Value="Product.CategoryId" class="form-select" id="Category">
+                            <option value="0" disabled selected>-- Select Category --</option>
+                            @foreach (var category in _categories)
+                            {
+                                <option value="@category.Id">@category.Name</option>
+                            }
+                        </InputSelect>
+                        <label for="Category">Category</label>
+                        <ValidationMessage For="@(() => Product.CategoryId)" />
+                    </div>
+                    <!-- InputFile -->
+                    <div class="form-floating py-3 col-12">
+                        <InputFile OnChange="LoadFiles" @bind-Value="Product.ImageUrl" class="form-control" id="customFile" accept="image/x-png, image/jpeg">
+                            
+                        </InputFile>
+                        <label for="customFile">Upload Image</label>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-6 col-md-3">
+                            <button type="submit" class="btn btn-primary form-control" disabled="@IsProcessing">
+                                <i class="bi bi-floppy2-fill"></i> @(Id == 0 ? "Create" : "Update")
+                            </button>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <a href="product" class="btn btn-secondary form-control" disabled="@IsProcessing">
+                                <i class="bi bi-arrow-bar-left"></i> Back to List
+                            </a>
+                        </div>
+                    </div>
+               </div>
+           </EditForm>
+           
+        </div>
+    </div>
+}
+
+
+@code {
+    private bool IsProcessing { get; set; } = false;
+
+    // for Image Uploading
+    private bool _isImageLoading { get; set; } = false;
+    private string? _directoryPath { get; set; }
+
+    [SupplyParameterFromForm]
+    public Product Product { get; set; } = new Product();
+
+    private IEnumerable<Category> _categories { get; set; } = new List<Category>();
+
+    [Parameter]
+    public int Id { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        IsProcessing = true;
+        await LoadProductAndCategoryList();
+        IsProcessing = false;
+    }
+
+    private async Task LoadProductAndCategoryList()
+    {
+        if (Id > 0)
+        {
+            Product = await _productRepository.GetAsync(Id);
+        }
+
+        // Δεν με νοιάζει εάν είναι Insert ή Update, θέλω πάντα να φορτώνω τα categories
+        _categories = await _categoryRepository.GetAllAsync();
+    }
+
+    private async Task UpsertProduct()
+    {
+        IsProcessing = true;
+
+        if (Product.Id == 0)
+        {
+            await _productRepository.CreateAsync(Product);
+            await _JS.ToastrSuccess("Product Created Successfully");
+        }
+        else
+        {
+            await _productRepository.UpdateAsync(Product);
+            _JS?.ToastrSuccess("Product Updated Successfully");
+        }
+        IsProcessing = false;
+
+        _navigationManager.NavigateTo("product"); 
+    }
+
+    private async Task LoadFiles(InputFileChangeEventArgs e)
+    {
+        _isImageLoading = true;
+        var imageFile = e.File;
+        // Να μην ξεχάσω να προσθέσω accept="image/x-png, image/jpeg" στο InputFile
+        if (imageFile != null)
+        {
+            // Να μην ξεχάσω να προσθέσω using System.IO; και using System.IO.Path;
+            var fileExtension = Path.GetExtension(imageFile.Name);
+            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png" };
+            if (!allowedExtensions.Contains(fileExtension.ToLower()))
+            {
+                await _JS.ToastrError("Only .jpg, .jpeg, .png files are allowed.");
+                _isImageLoading = false;
+                return;
+            }
+            // Limit file size to 2MB (2 * 1024 * 1024 bytes)
+            long maxFileSize = 2 * 1024 * 1024;
+            if (imageFile.Size > maxFileSize)
+            {
+                await _JS.ToastrError("File size exceeds the 2MB limit.");
+                _isImageLoading = false;
+                return;
+            }
+            // Generate a unique filename using GUID
+            var uniqueFileName = $"{Guid.NewGuid()}{fileExtension}";
+            // Define the directory path where images will be stored
+            _directoryPath = Path.Combine("images", "products");
+            // Ensure the directory exists
+            if (!Directory.Exists(_directoryPath))
+            {
+                Directory.CreateDirectory(_directoryPath);
+            }
+            var filePath = Path.Combine(_directoryPath, uniqueFileName);
+            // Save the file to the specified path
+            using (var fileStream = new FileStream(filePath, FileMode.Create))
+            {
+                await imageFile.OpenReadStream(maxFileSize).CopyToAsync(fileStream);
+            }
+            // Update the Product's ImageUrl property with the relative path
+            Product.ImageUrl = Path.Combine("images", "products", uniqueFileName).Replace("\\", "/");
+        }
+        _isImageLoading = false;
+    }
+    
+}

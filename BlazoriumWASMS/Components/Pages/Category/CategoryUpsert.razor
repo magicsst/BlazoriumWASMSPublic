@@ -1,0 +1,124 @@
+﻿@page "/category/create"
+@page "/category/update/{id:int}"
+
+@inject ICategoryRepository _categoryRepository
+@inject NavigationManager _navigationManager
+@inject IJSRuntime _JS
+
+
+<!--
+Τι κάνει το InteractiveWebAssemblyRenderMode(true)
+    Δημιουργεί ένα νέο WebAssembly render mode, με το true να σημαίνει “prerender”.
+    Δηλαδή:
+        Στην αρχή, η σελίδα σου θα προ-αποδοθεί (prerendered) στον server έτσι ο χρήστης βλέπει αμέσως HTML.
+        Μετά φορτώνεται το Blazor WebAssembly runtime στο browser και η σελίδα γίνεται διαδραστική.
+        Χωρίς το true (δηλ. new InteractiveWebAssemblyRenderMode(false)), 
+            δεν θα υπήρχε prerendering — ο χρήστης θα έβλεπε κενό μέχρι να φορτώσει το WebAssembly.
+-->
+
+@rendermode @(new InteractiveWebAssemblyRenderMode(true))
+
+@if (IsProcessing)
+{
+    <div class="position-absolute w-75 h-75 d-flex flex-column align-items-center bg-white justify-content-center">
+        <img src="/images/loading.gif" alt="loading" />
+    </div>
+}
+else
+{
+     <div class="card shadow border-0 mt-4">
+        <div class="card-header bg-black bg-gradient ml-0 py-3">
+            <div class="row">
+                <div class="col-12 text-center">
+                    <!--Ternary Operator -->
+                    <h2 class="text-white py-2">@(Id==0?"Create":"Update")</h2> 
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-4">
+           <EditForm Model="Category" FormName="CategoryUpsertForm" OnValidSubmit="UpsertCategory">
+               <DataAnnotationsValidator/>
+
+               <div class="border p-3 mt-4">
+                    <div class="form-floating py-3 col-12">
+                        <!-- Στο InputText μπορώ να προσθέσω το 
+                             placeholder="Type the Product Name..." -->
+                        <InputText @bind-Value="Category.Name" class="form-control" id="Name" />
+                        <label for="Name">Name</label>
+                        <ValidationMessage For="@(()=>Category.Name)" />
+                    </div>
+                    <div class="row mt-3">
+                        <!--
+                            col-6: Λέει στο στοιχείο να καταλαμβάνει 6 από τις 12 στήλες του grid σε μικρές (ή μικρότερες) οθόνες (δηλ. για xs διαστάσεις, κάτω από 576px).
+                            col-md-3: Λέει στο ίδιο στοιχείο να καταλαμβάνει 3 από τις 12 στήλες του grid σε οθόνες μεσαίου μεγέθους και άνω (δηλ. για md και πάνω, δηλαδή ≥768px).
+                        -->
+                        <div class="col-6 col-md-3">
+                            <!-- Το form-control φτιάχνει καλύτερο το width του button -->
+                            <button type="submit" class="btn btn-primary form-control" disabled="@IsProcessing">
+                                <i class="bi bi-floppy2-fill"></i> @(Id == 0 ? "Create" : "Update")
+                            </button>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <a href="category" class="btn btn-secondary form-control" disabled="@IsProcessing">
+                                <i class="bi bi-arrow-bar-left"></i> Back to List
+                            </a>
+                        </div>
+                    </div>
+               </div>
+           </EditForm>
+           
+        </div>
+    </div>
+}
+
+
+@code {
+    private bool IsProcessing { get; set; } = false;
+
+    /*
+    Πριν το .NET 8, για να πάρεις δεδομένα από EditForm, έπρεπε να έχεις ένα Model object και να το bindάρεις.
+    Με το [SupplyParameterFromForm] μπορείς να δίνεις τιμές κατευθείαν σε παραμέτρους ενός component.
+    */
+    [SupplyParameterFromForm]
+    public Category Category { get; set; } = new Category();
+
+    [Parameter]
+    public int Id { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        IsProcessing = true;
+        await LoadCategory();
+        IsProcessing = false;
+    }
+
+    private async Task LoadCategory()
+    {
+        if (Id > 0)
+        {
+            Category = await _categoryRepository.GetAsync(Id);
+        }
+    }
+
+    private async Task UpsertCategory()
+    {
+        IsProcessing = true;
+
+        // Στο LoadCategory() το Category.Id είτε θα παραμείνει 0 είτε θα πάρει τιμή
+        if (Category.Id == 0)
+        {
+            // Create
+            await _categoryRepository.CreateAsync(Category);
+            await _JS.ToastrSuccess("Category Created Successfully");
+        }
+        else
+        {
+            // Update
+            await _categoryRepository.UpdateAsync(Category);
+            _JS?.ToastrSuccess("Category Updated Successfully");
+        }
+        IsProcessing = false;
+
+        _navigationManager.NavigateTo("category"); // Redirect to the category list page
+    }
+}

@@ -1,0 +1,280 @@
+﻿@page "/category"
+
+<!-- This is particularly useful for interactive components or data-heavy pages, 
+    where you want a responsive feel without waiting for everything to complete. -->
+@attribute [StreamRendering]
+
+@inject ICategoryRepository _categoryRepository
+@inject IJSRuntime _JS
+
+<!-- This is a Button Component aded by me -->
+<BsModal OnModalConfirmation="ConfirmDelete_Click" 
+    ButtonBootstrapStyle="btn-danger"
+    ButtonText="Delete"
+    Title="Are you sure you want to delete this Category?">
+</BsModal>
+
+<h3>CategoryList</h3>
+
+@if (IsProcessing)
+{
+    /*
+        position-absolute
+            Sets the element’s position to absolute, meaning it will be positioned relative to its nearest positioned ancestor.
+        w-75
+            Sets the element’s width to 75% of its containing element.
+        h-75
+            Sets the element’s height to 75 % of its containing element.
+        d-flex
+            d-flex = display: flex;
+            Αυτό σημαίνει ότι το στοιχείο στο οποίο εφαρμόζεται γίνεται ένα flex container.
+            Τι είναι το Flexbox;
+            Το Flexbox είναι ένα σύστημα διάταξης στοιχείων στη CSS που επιτρέπει:
+                Ευέλικτη στοίχιση παιδιών στοιχείων,
+                Εύκολη κάθετη ή οριζόντια διάταξη,
+                Κεντραρίσματα, αποστάσεις, και αναδιατάξεις πιο δυναμικά.
+        flex-column
+            Arranges flex items in a vertical column
+        align-items-center
+            Aligns child elements horizontally(cross-axis in a column layout) to the center within the flex container.
+        justify-content-center
+            Kεντράρισμα κατά μήκος του Div
+    */
+    <div class="position-absolute w-75 h-75 d-flex flex-column align-items-center bg-white justify-content-center">
+        <img src="/images/loading.gif" alt="loading" />
+    </div>
+}
+else
+{
+    //  mt-4: Margin Top 4 px
+    /*
+        card-header
+            Bootstrap κλάση που δηλώνει ότι αυτό το στοιχείο είναι το header μιας κάρτας (.card).
+            Συνήθως περιέχει τίτλους, κουμπιά, ή στοιχεία πλοήγησης.
+        bg-black
+            Ορίζει το χρώμα φόντου σε μαύρο (background-color: black;).
+        bg-gradient
+            Προσθέτει ένα γραμμικό gradient στο φόντο (λειτουργεί πάνω από το bg-black, κάνοντας το λίγο πιο "λαμπερό" ή με βάθος).
+        m-lg-0
+            Ορίζει καθόλου εξωτερικό περιθώριο (margin) για μεγάλες οθόνες (lg και άνω).
+            Δεν επηρεάζει μικρότερες οθόνες.
+        py-3
+            Εφαρμόζει κάθετο εσωτερικό περιθώριο (padding-y) ίσο με 1rem (ή 16px).
+            Δηλαδή: padding-top: 1rem; padding-bottom: 1rem;
+        ml-0
+            Ορίζει μηδενικό αριστερό περιθώριο (margin-left: 0;).
+            Αυτό σημαίνει ότι δεν υπάρχει απόσταση από το αριστερό άκρο του γονικού στοιχείου.
+        p-4
+            Padding 4
+        pb-3
+            Padding Bottom 3
+        text-end
+            Δηλαδή, στοιχίζει το κείμενο δεξιά.
+        btn-lg
+            Μεγάλο κουμπί
+    */
+    <div class="card shadow border-0 mt-4">
+        <div class="card-header bg-black bg-gradient ml-0 py-3">
+            <div class="row">
+                <div class="col-12 text-center">
+                    <h2 class="text-white py-2">Category List</h2>
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-4">
+            <div class="row pb-3">
+                <div class="col-12 text-end">
+                    <!-- Μπορώ να βάλω και button αντί a -->
+                    <!-- <button class="btn btn-lg btn-secondary" style="width:250px;">Add New Category</button> -->
+                    <a href="/category/create" class="btn btn-lg btn-secondary" style="width:250px;">
+                        <i class="bi bi-plus-square"></i> Add New Category
+                    </a>
+                </div>
+            </div>
+            <!-- Εάν υπάρχουν Categories -->
+            @if (Categories.Any())
+            {
+                <table class="table table-bordered table-striped">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var obj in Categories)
+                        {
+                            <tr>
+                                <td>@obj.Name</td>
+                                <td>
+                                    <a href="@($"category/update/{obj.Id}")" class="btn btn-primary">
+                                        <i class="bi bi-pencil-square"></i> Edit
+                                    </a>
+                                    <!-- Για να περάσω argument στην method, πρέπει να γράψω lambda expression -->
+                                    <button class="btn btn-danger" @onclick="()=>HandleDelete(obj.Id)">
+                                        <i class="bi bi-trash3"></i> Delete
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private bool IsProcessing { get; set; } = false;
+    private IEnumerable<Category> Categories { get; set; } = new List<Category>();
+    private int DeleteCategoryID { get; set; } = 0;
+
+    // Ότι περιγράφω εδω αφορά την σύγχρονη LoadCategories() μέθοδο. Επίσης, όπου καλώ την LoadCategories(), η κλήση είναι συγχρονη χωρίς το await.
+    // Επεξήγηση σχετικά με το πόσο σημαντικό είναι το await:
+    //      Παρατηρώ ότι εάν δεν ολοκληρωθεί η εκτέλεση όλων των εντολών του Task onInitialized(), δεν γίνεται render.
+    //      1)  Βάζω breakpoint στην αρχή της OnInitializedAsync() και προχωρώ με F11.
+    //              Στην await Task.Delay(2000); βγαίνει ο spinner (ασύγχρονη εκτέλεση)
+    //      2)  Επαναλαμβάνω κρατώντας το breakpoint και κάνοντας comment την γραμμή
+    //              await Task.Delay(2000);
+    //          Θα δώ ότι δεν εμφανίζει το spinner (σύγχρονη εκτέλεση)
+    //      3)  Κρατάω ότι έχω στο (2) και προσθέτω στην LoadCategories
+    //              Thread.Sleep(5000) // seconds
+    //          To UI γίνεται frozen για 5 seconds. Θα το καταλάβω καλύτερα εάν αφαιρέσω το breakpoint και το τρέξω.
+    //  Συμπέρασμα΅:
+    //      Το await ξεμπλοκάρει το execution chain, επιτρέποντας το rendering του Page πριν το loading ενος asset.
+    //      
+    //      4) Κάνω enable το await Task.Delay(1); σε 1 Millisecond αλλα το Thread sleep είναι 5 seconds
+    //          Ο spinner παιζει μια χαρά γιατι το 1 ms αρκει ώστε να ξεκινήσει το render του spinner.
+    //      5) Αλλαζω το Task.Delay(1) σε Task.Yield()
+    //          Το Task.Yield() αφαιρεί την καθυστέρηση (όχι waiting ή delay), επιτρέποντας στο UI να κάνει render.  
+    //          Οπότε το spinner εμφανίζεται αμέσως. Δεν βλέπω καμια αλλαγή κατα το run.
+    //   Συμπέρασμα:
+    //          Με άλλα λόγια, όταν είμαι στο OnInitialized και θέλω το UI να γίνει rendered μεταξύ του ιδιου του Execution, βάζω ένα await.
+    //          και
+    //          Χρησιμοποιώ το Task.Yield() όταν θέλω force Page rerender με το Current state του UI 
+    //   Βελτίωση: Μπορώ να κάνω τις μεθόδους του Repository ασύγχρονες ώστε να έχω πιο απλοποιημένη γραφή στο UI ...
+    //          Δηλαδή κάτι σαν αυτό
+    //          Categories = await _categoryRepository.GetAll();
+
+    // Η Task.Yield() χρησιμοποιείται στον ασύγχρονο προγραμματισμό για να διακόψει προσωρινά την εκτέλεση μιας async μεθόδου 
+    // και να επιστρέψει τον έλεγχο πίσω στο Main Thread.
+
+    #region "1st onLoading Approach"
+    protected override async Task OnInitializedAsync()
+    {
+        IsProcessing = true;
+
+        // Βάζω μια το ένα και μια το άλλο ώστε να δώ πως συμπεριφέρεται το UI
+        // await Task.Delay(1); // Όπως το Thread.Sleep(1) αλλά δεν μπλοκάρει το UI
+        // await Task.Yield();  // Χρησιμοποιείται για να επιτρέψει στο UI να κάνει render πριν συνεχίσει την εκτέλεση   
+        await LoadCategories();
+        
+        //Thread.Sleep(5000); // Simulate a long running task (5 sec)
+        IsProcessing = false;
+    }
+    #endregion
+
+    #region "2nd onloading approach"
+    /*
+    // Για τη 2η προσέγγιση του onLoading πρέπει να κάνω το @rendermode InteractiveServer
+    //      Γιατί στον Server καλείται το PreRendering και στον client καλείται το onInitialized. Μοιάζει σαν 2πλή κλήση.
+    //      Με Global interactivity δεν φαίνεται κάτι αλλά σε PerPage interactivity γίνεται 2πλή κλήση του LoadCategories().
+    //      Έχει νόημα σε Interactivity Server mode γιατί όταν κάνει Loading στο AfterRender, δεν βγάζει spinner
+    //      επειδή έχει γίνει ήδη το rendering. Για αυτό πρέπει να βάλω το StateHasChanged()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Άρα δεν κάνω load άσκοπα σε κάθε render
+        if (firstRender)
+        {
+            // Προσοχή: Για ευκολία, κάνω το IsProcessing = true, δηλαδή
+            //              private bool IsProcessing { get; set; } = true;
+            //          KAI
+            //          κάνω comment τις γραμμές
+            //              IsProcessing = true;
+            //              StateHasChanged(); // Please rerender the UI and show Spinner
+
+            await LoadCategories();
+            IsProcessing = false;
+            
+            // Ενώ εμφανίζεται ο spinner, δεν φεύγει από την οθόνη γιατι είμαι στο AfterRender, οπότε ξανακαλώ το StateHasChanged()
+            StateHasChanged();
+            }
+        }
+    */
+    #endregion
+
+    #region "Synchronous Method"
+    // Για λόγους Test
+    /*
+    private void LoadCategories()
+    {
+        Thread.Sleep(5000);
+        Categories = _categoryRepository.GetAll();
+        }
+    */
+    #endregion
+
+    private async Task LoadCategories()
+    {
+        Categories = await _categoryRepository.GetAllAsync();
+    }
+
+    #region "Delete Category Process"
+        /*
+            1. Search for Bootstrap Modal
+                https://getbootstrap.com/docs/5.3/components/modal/
+                Search for 'modal'
+                Press button 'Launch demo modal' για Test
+            2. Components/Shared, add new razor componenet named BsModal.razor
+            3. Add the code in BsModal.razor and Test it.        
+        */
+    #endregion
+
+    private void HandleDelete(int id)
+    {
+        DeleteCategoryID = id; 
+        _JS.InvokeVoidAsync("ShowConfirmationModal");
+    }
+
+    // We need to use EventCallback in the BsModal component in order to call this method
+    private async Task ConfirmDelete_Click(bool isConfirmed)
+    {
+        // Εμφανίζεται ο Loader
+        IsProcessing = true;
+
+        // Κλείνω το Modal
+        await _JS.InvokeVoidAsync("HideConfirmationModal");
+
+        if (isConfirmed && DeleteCategoryID!=0)
+        {
+            // Διαγράφω το Category
+            var result = await _categoryRepository.DeleteAsync(DeleteCategoryID);
+
+            // Εάν πέτυχε το Delete
+            if (result)
+            {
+                // Γιατί βάζω το ?
+                //      Χωρίς το ?, εμφανίζεται μήνυμα λάθους σχετικά με το ότι δεν έχω βάλει το await 
+                //      μόλις στο _JS βάλω το ? θα διορθωθεί!!!
+                // Επεξήγηση
+                /*
+                Το ? σημαίνει: "κάλεσε τη μέθοδο μόνο αν το _JS δεν είναι null".
+                    Αν είναι _JS είναι null, δεν γίνεται καθόλου η κλήση.
+                    Αν δεν είναι null, η κλήση θα ξεκινήσει, αλλά δεν θα περιμένεις να τελειώσει. 
+                        Αυτό λέγεται fire-and-forget (μπορεί να χαθεί exception αν υπάρξει).
+                */
+                _JS?.ToastrSuccess("Category deleted successfully.");                
+            }
+            else
+                _JS?.ToastrError("Error encountered while deleting.");
+
+            await LoadCategories();
+        }
+
+        // Reset το DeleteCategoryID
+        DeleteCategoryID = 0;
+        
+        // Εξφανίζεται ο Loader
+        IsProcessing = false;
+    }
+}
